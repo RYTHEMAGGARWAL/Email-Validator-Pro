@@ -8,7 +8,7 @@ dotenv.config();
 
 const app = express();
 const resolveMx = promisify(dns.resolveMx);
-app.use(cors());
+app.use(cors({ origin: 'https://email-validator-pro-sigma.vercel.app' }));
 app.use(express.json());
 
 // ─────────────────────────────────────────────
