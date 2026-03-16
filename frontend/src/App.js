@@ -6,11 +6,11 @@ const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const StatusBadge = ({ status }) => {
   const config = {
-    VALID: { color: '#00d084', bg: '#00d08415', label: 'VALID', icon: '✓' },
-    INVALID: { color: '#ff4757', bg: '#ff475715', label: 'INVALID', icon: '✗' },
-    DISPOSABLE: { color: '#ff6b35', bg: '#ff6b3515', label: 'DISPOSABLE', icon: '🚫' },
-    LIKELY_VALID: { color: '#ffa502', bg: '#ffa50215', label: 'LIKELY VALID', icon: '~' },
-    UNKNOWN: { color: '#a0a0b0', bg: '#a0a0b015', label: 'UNKNOWN', icon: '?' },
+    VALID:        { color: '#00d084', bg: '#00d08415', label: 'VALID',        icon: '✓'  },
+    INVALID:      { color: '#ff4757', bg: '#ff475715', label: 'INVALID',      icon: '✗'  },
+    DISPOSABLE:   { color: '#ff6b35', bg: '#ff6b3515', label: 'DISPOSABLE',   icon: '🚫' },
+    LIKELY_VALID: { color: '#ffa502', bg: '#ffa50215', label: 'LIKELY VALID', icon: '~'  },
+    UNKNOWN:      { color: '#a0a0b0', bg: '#a0a0b015', label: 'UNKNOWN',      icon: '?'  },
   };
   const c = config[status] || config.UNKNOWN;
   return (
@@ -89,9 +89,11 @@ export default function App() {
     }
   }, [bulkEmails]);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') validateSingle();
-  };
+  const handleKeyDown = (e) => { if (e.key === 'Enter') validateSingle(); };
+
+  const zb = result && result.checks && result.checks.zerobounce;
+  const smtp = result && result.checks && result.checks.smtp;
+  const hasZB = zb && zb.status;
 
   return (
     <div className="app">
@@ -101,17 +103,17 @@ export default function App() {
         <div className="header-icon">@</div>
         <div>
           <h1 className="header-title">Email Validator Pro</h1>
-          <p className="header-sub">4-Layer Deep Validation — Format · Disposable · MX · SMTP</p>
+          <p className="header-sub">
+            {hasZB
+              ? '4-Layer Deep Validation — Format · Disposable · MX · ZeroBounce'
+              : '4-Layer Deep Validation — Format · Disposable · MX · SMTP'}
+          </p>
         </div>
       </header>
 
       <div className="tabs">
-        <button className={`tab ${tab === 'single' ? 'active' : ''}`} onClick={() => setTab('single')}>
-          Single Email
-        </button>
-        <button className={`tab ${tab === 'bulk' ? 'active' : ''}`} onClick={() => setTab('bulk')}>
-          Bulk Validate
-        </button>
+        <button className={`tab ${tab === 'single' ? 'active' : ''}`} onClick={() => setTab('single')}>Single Email</button>
+        <button className={`tab ${tab === 'bulk' ? 'active' : ''}`} onClick={() => setTab('bulk')}>Bulk Validate</button>
       </div>
 
       <div className="card">
@@ -138,8 +140,9 @@ export default function App() {
               <div className="loading-state">
                 <div className="loading-steps">
                   <div className="loading-step active">① Checking format...</div>
-                  <div className="loading-step">② Looking up MX records...</div>
-                  <div className="loading-step">③ SMTP handshake...</div>
+                  <div className="loading-step">② Checking disposable databases...</div>
+                  <div className="loading-step">③ Looking up MX records...</div>
+                  <div className="loading-step">④ ZeroBounce verification...</div>
                 </div>
               </div>
             )}
@@ -158,26 +161,31 @@ export default function App() {
                 <ConfidenceMeter score={result.confidence} />
 
                 <div className="checks">
+                  {/* Format */}
                   <CheckRow
                     label="① Format Validation"
                     passed={result.checks.format.passed}
                     details={result.checks.format.details}
                   />
+
+                  {/* Disposable */}
                   <CheckRow
                     label="② Disposable / Temp Email Check"
-                    passed={result.checks.disposable?.passed}
-                    details={result.checks.disposable?.details}
+                    passed={result.checks.disposable ? result.checks.disposable.passed : null}
+                    details={result.checks.disposable ? result.checks.disposable.details : []}
                   >
-                    {result.checks.disposable?.source && (
+                    {result.checks.disposable && result.checks.disposable.source && (
                       <div className="check-detail-item">Source: {result.checks.disposable.source}</div>
                     )}
                   </CheckRow>
+
+                  {/* MX */}
                   <CheckRow
                     label="③ MX Record / DNS Check"
-                    passed={result.checks.mx.passed}
-                    details={result.checks.mx.details}
+                    passed={result.checks.mx ? result.checks.mx.passed : null}
+                    details={result.checks.mx ? result.checks.mx.details : []}
                   >
-                    {result.checks.mx.mxRecords?.length > 0 && (
+                    {result.checks.mx && result.checks.mx.mxRecords && result.checks.mx.mxRecords.length > 0 && (
                       <div className="mx-records">
                         {result.checks.mx.mxRecords.map((mx, i) => (
                           <div key={i} className="mx-record">
@@ -188,27 +196,51 @@ export default function App() {
                       </div>
                     )}
                   </CheckRow>
-                  <CheckRow
-                    label="④ SMTP Mailbox Check"
-                    passed={result.checks.smtp.passed}
-                    details={result.checks.smtp.details}
-                  >
-                    {result.checks.smtp.smtpResponse?.length > 0 && (
-                      <details className="smtp-log">
-                        <summary>View SMTP Log</summary>
-                        <div className="smtp-log-content">
-                          {result.checks.smtp.smtpResponse.map((line, i) => (
-                            <div key={i} className="smtp-line">{line}</div>
-                          ))}
+
+                  {/* ZeroBounce OR SMTP */}
+                  {hasZB ? (
+                    <CheckRow
+                      label="④ ZeroBounce Verification"
+                      passed={result.overallStatus === 'VALID'}
+                      details={zb.details}
+                    >
+                      {zb.status && (
+                        <div className="check-detail-item">
+                          ZB Status: <strong>{zb.status}</strong>
+                          {zb.subStatus ? ' — ' + zb.subStatus.replace(/_/g, ' ') : ''}
                         </div>
-                      </details>
-                    )}
-                  </CheckRow>
+                      )}
+                      {zb.isFreeEmail && (
+                        <div className="check-detail-item">Free email provider (Gmail / Yahoo / etc)</div>
+                      )}
+                    </CheckRow>
+                  ) : (
+                    <CheckRow
+                      label="④ SMTP Mailbox Check"
+                      passed={smtp ? smtp.passed : null}
+                      details={smtp ? smtp.details : ['SMTP check not available']}
+                    >
+                      {smtp && smtp.smtpResponse && smtp.smtpResponse.length > 0 && (
+                        <details className="smtp-log">
+                          <summary>View SMTP Log</summary>
+                          <div className="smtp-log-content">
+                            {smtp.smtpResponse.map((line, i) => (
+                              <div key={i} className="smtp-line">{line}</div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </CheckRow>
+                  )}
                 </div>
 
                 <div className="accuracy-note">
                   <span className="note-icon">ℹ</span>
-                  <span>Note: Some servers (Gmail, Yahoo) block SMTP probing as anti-spam. In those cases, confidence is based on Format + MX which is ~80% accurate. True 100% verification requires sending an actual email.</span>
+                  <span>
+                    {hasZB
+                      ? 'ZeroBounce provides high-accuracy verification including Gmail, Yahoo, and all major providers.'
+                      : 'Note: Gmail/Yahoo block SMTP probing. Add ZEROBOUNCE_API_KEY to backend for Gmail accuracy.'}
+                  </span>
                 </div>
               </div>
             )}
@@ -246,8 +278,8 @@ export default function App() {
                     <div className="stat-label">Invalid</div>
                   </div>
                   <div className="stat unknown">
-                    <div className="stat-num">{bulkResult.unknown}</div>
-                    <div className="stat-label">Uncertain</div>
+                    <div className="stat-num">{bulkResult.disposable || 0}</div>
+                    <div className="stat-label">Disposable</div>
                   </div>
                   <div className="stat total">
                     <div className="stat-num">{bulkResult.total}</div>
@@ -268,7 +300,7 @@ export default function App() {
                     </thead>
                     <tbody>
                       {bulkResult.results.map((r, i) => (
-                        <tr key={i} className={r.overallStatus.toLowerCase()}>
+                        <tr key={i}>
                           <td>{i + 1}</td>
                           <td className="email-cell">{r.email}</td>
                           <td><StatusBadge status={r.overallStatus} /></td>
@@ -285,10 +317,13 @@ export default function App() {
                 </div>
 
                 <button className="export-btn" onClick={() => {
-                  const csv = ['Email,Status,Confidence,Summary', ...bulkResult.results.map(r => `${r.email},${r.overallStatus},${r.confidence}%,"${r.summary}"`)].join('\n');
+                  const csv = ['Email,Status,Confidence,Summary',
+                    ...bulkResult.results.map(r => `${r.email},${r.overallStatus},${r.confidence}%,"${r.summary}"`)
+                  ].join('\n');
                   const blob = new Blob([csv], { type: 'text/csv' });
                   const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a'); a.href = url; a.download = 'email_validation_results.csv'; a.click();
+                  const a = document.createElement('a');
+                  a.href = url; a.download = 'email_validation_results.csv'; a.click();
                 }}>
                   ↓ Export CSV
                 </button>
@@ -303,15 +338,19 @@ export default function App() {
         <div className="legend-items">
           <div className="legend-item">
             <span className="legend-num">1</span>
-            <div><strong>Format Check</strong> — Validates structure, length, special chars, disposable domains</div>
+            <div><strong>Format Check</strong> — Validates structure, length, special chars</div>
           </div>
           <div className="legend-item">
             <span className="legend-num">2</span>
-            <div><strong>MX Record Check</strong> — Confirms domain can actually receive emails via DNS</div>
+            <div><strong>Disposable Check</strong> — 127,000+ temp email domains blocked</div>
           </div>
           <div className="legend-item">
             <span className="legend-num">3</span>
-            <div><strong>SMTP Check</strong> — Contacts mail server directly to verify mailbox existence</div>
+            <div><strong>MX Record Check</strong> — Confirms domain can receive emails</div>
+          </div>
+          <div className="legend-item">
+            <span className="legend-num">4</span>
+            <div><strong>ZeroBounce</strong> — Deep mailbox verification including Gmail, Yahoo, Outlook</div>
           </div>
         </div>
       </div>
